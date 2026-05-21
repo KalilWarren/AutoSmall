@@ -79,6 +79,8 @@ the repo — they live only in Cloudflare. Change either by re-running
   left blank. Raw totals, overall percentages, and per-type percentages map to
   their matching fields. Per-sentence notes are combined into
   `sent_rep_comments`.
+- The form status (`smalls_sentence_repetition_complete`) is set to
+  **Complete**, so submitted records aren't left showing as Incomplete.
 - `overwriteBehavior` is `normal` — a submission updates the form's fields and
   leaves unrelated fields on the record untouched.
 

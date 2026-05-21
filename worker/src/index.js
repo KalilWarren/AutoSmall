@@ -109,6 +109,10 @@ function mapRecord(body, pid, date, env) {
   });
 
   rec.sent_rep_comments = String(body.comments || '');
+
+  /* Mark the instrument's status as Complete (0=Incomplete, 1=Unverified,
+     2=Complete) so submitted records don't show as Incomplete in REDCap. */
+  rec.smalls_sentence_repetition_complete = '2';
   return rec;
 }
 
