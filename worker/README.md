@@ -81,6 +81,12 @@ the repo — they live only in Cloudflare. Change either by re-running
   `sent_rep_comments`.
 - The form status (`smalls_sentence_repetition_complete`) is set to
   **Complete**, so submitted records aren't left showing as Incomplete.
+- **Overwrite guard:** before importing, the Worker checks whether that
+  participant already has sentence-repetition data. If so, it returns a
+  "needs confirmation" response (HTTP 409) and the app makes the rater
+  explicitly confirm before replacing it — a mistyped Participant ID can't
+  silently overwrite an existing record. This check requires the REDCap API
+  token to have **Export** rights as well as **Import**.
 - `overwriteBehavior` is `normal` — a submission updates the form's fields and
   leaves unrelated fields on the record untouched.
 

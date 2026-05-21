@@ -116,6 +116,59 @@ function mapRecord(body, pid, date, env) {
   return rec;
 }
 
+/* Pre-flight check: does this record's sentence-repetition form already
+   hold data? Returns { hasData, info? } or { error }. Requires the API
+   token to have Export rights in addition to Import. */
+async function checkExisting(pid, env) {
+  const q = new URLSearchParams();
+  q.set('token', env.REDCAP_TOKEN);
+  q.set('content', 'record');
+  q.set('action', 'export');
+  q.set('format', 'json');
+  q.set('type', 'flat');
+  q.set('records[0]', pid);
+  q.set('fields[0]', 'sent_rep_date');
+  q.set('fields[1]', 'smalls_sentence_repetition_complete');
+  if (env.REDCAP_EVENT) q.set('events[0]', env.REDCAP_EVENT);
+
+  let resp, text;
+  try {
+    resp = await fetch(env.REDCAP_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: q
+    });
+    text = await resp.text();
+  } catch (e) {
+    return { error: 'Could not reach REDCap to check for existing data.' };
+  }
+  if (!resp.ok) {
+    return { error: 'REDCap rejected the existing-data check — the API token ' +
+      'may need Export rights in addition to Import. ' + text };
+  }
+  let rows;
+  try { rows = JSON.parse(text); }
+  catch (e) { return { error: 'Unexpected REDCap response while checking for existing data.' }; }
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return { hasData: false };
+  }
+  for (let i = 0; i < rows.length; i++) {
+    const date = String(rows[i].sent_rep_date || '').trim();
+    const status = rows[i].smalls_sentence_repetition_complete;
+    if (date || status === '1' || status === '2') {
+      return {
+        hasData: true,
+        info: {
+          date: date || '(no date recorded)',
+          status: status === '2' ? 'Complete'
+                : status === '1' ? 'Unverified' : 'Incomplete'
+        }
+      };
+    }
+  }
+  return { hasData: false };
+}
+
 export default {
   async fetch(request, env) {
     const origin = env.ALLOWED_ORIGIN || '*';
@@ -152,6 +205,22 @@ export default {
     const date = String(body.assessmentDate || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return json(400, { ok: false, error: 'Assessment date must be in YYYY-MM-DD format.' }, origin);
+    }
+
+    // --- overwrite guard: never silently replace existing data ---
+    if (body.confirmOverwrite !== true) {
+      const existing = await checkExisting(pid, env);
+      if (existing.error) {
+        return json(502, { ok: false, error: existing.error }, origin);
+      }
+      if (existing.hasData) {
+        return json(409, {
+          ok: false,
+          needsConfirm: true,
+          error: 'This participant already has sentence-repetition data in REDCap.',
+          existing: existing.info
+        }, origin);
+      }
     }
 
     // --- map + import ---

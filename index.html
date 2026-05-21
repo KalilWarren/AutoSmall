@@ -143,6 +143,10 @@
     color: var(--on-accent); font-weight: 600;
   }
   .btn-primary:hover:not(:disabled) { filter: brightness(1.07); }
+  .btn-danger {
+    background: #c0392b; border-color: #c0392b; color: #fff; font-weight: 600;
+  }
+  .btn-danger:hover:not(:disabled) { filter: brightness(1.08); }
   .btn-text {
     background: none; border: none; color: var(--accent);
     cursor: pointer; font: inherit; font-weight: 600; padding: 6px 2px;
@@ -1031,9 +1035,16 @@ function exportCSV() {
 }
 
 /* ---------- REDCap submission ---------- */
+let rcPendingOverwrite = false;   // true once REDCap reports the record already has data
+
 function setRcStatus(msg, kind) {
   rcStatus.textContent = msg;
   rcStatus.className = 'modal-status' + (kind ? ' ' + kind : '');
+}
+function resetOverwriteState() {
+  rcPendingOverwrite = false;
+  rcSubmit.textContent = 'Submit';
+  rcSubmit.className = 'btn btn-primary';
 }
 
 /* Assemble AutoSmall's scoring into the payload the Worker expects.
@@ -1078,6 +1089,7 @@ function openRedcapModal() {
   rcParticipant.value = '';
   rcPassword.value = '';
   rcDate.value = new Date().toISOString().slice(0, 10);
+  resetOverwriteState();
   rcSubmit.disabled = false;
   rcCancel.disabled = false;
   rcCancel.textContent = 'Cancel';
@@ -1100,27 +1112,47 @@ async function submitToRedcap() {
 
   rcSubmit.disabled = true;
   rcCancel.disabled = true;
-  setRcStatus('Submitting to REDCap…', '');
+  setRcStatus(rcPendingOverwrite ? 'Overwriting…' : 'Submitting to REDCap…', '');
   try {
+    const payload = buildRedcapPayload(pid, date, pw);
+    payload.confirmOverwrite = rcPendingOverwrite;
     const res = await fetch(WORKER_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(buildRedcapPayload(pid, date, pw))
+      body: JSON.stringify(payload)
     });
     let data = {};
     try { data = await res.json(); } catch (e) { /* non-JSON response */ }
+
+    if (res.status === 409 && data.needsConfirm) {
+      // REDCap already has data for this participant — make the rater confirm.
+      rcPendingOverwrite = true;
+      const ex = data.existing || {};
+      setRcStatus('⚠ ' + pid + ' already has sentence-repetition data in REDCap (assessed '
+        + (ex.date || '?') + ', ' + (ex.status || '?')
+        + '). Click Overwrite to replace it, or change the Participant ID.', 'err');
+      rcSubmit.textContent = 'Overwrite';
+      rcSubmit.className = 'btn btn-danger';
+      rcSubmit.disabled = false;
+      rcCancel.disabled = false;
+      return;
+    }
     if (res.ok && data.ok) {
       setRcStatus('✓ Submitted to REDCap for participant ' + pid + '.', 'ok');
       rcPassword.value = '';
+      resetOverwriteState();
+      rcSubmit.disabled = true;          // nothing more to submit for this record
       rcCancel.disabled = false;
       rcCancel.textContent = 'Close';
     } else {
       setRcStatus('✗ ' + (data.error || ('Submission failed (HTTP ' + res.status + ').')), 'err');
+      resetOverwriteState();
       rcSubmit.disabled = false;
       rcCancel.disabled = false;
     }
   } catch (e) {
     setRcStatus('✗ Could not reach the submission service — check your connection.', 'err');
+    resetOverwriteState();
     rcSubmit.disabled = false;
     rcCancel.disabled = false;
   }
@@ -1129,6 +1161,10 @@ async function submitToRedcap() {
 submitBtn.addEventListener('click', openRedcapModal);
 rcCancel.addEventListener('click', closeRedcapModal);
 rcSubmit.addEventListener('click', submitToRedcap);
+rcParticipant.addEventListener('input', function () {
+  // Changing the participant clears a pending overwrite confirmation.
+  if (rcPendingOverwrite) { resetOverwriteState(); setRcStatus('', ''); }
+});
 redcapModal.addEventListener('click', function (e) {
   if (e.target === redcapModal) closeRedcapModal();
 });
