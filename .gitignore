@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Local working files — not part of the deployed app
+*.pdf
+Stimuli
+Stimuli_Refined.md
+
+# Tooling / local config
+.claude/

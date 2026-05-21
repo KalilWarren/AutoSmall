@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentence Repetition Scoring</title>
+<style>
+  /* ---------- Theme tokens (light) ---------- */
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #f6f7f9;
+    --text: #1c2025;
+    --muted: #717784;
+    --faint: #9a9faa;
+    --border: #e3e6ea;
+    --border-strong: #d3d7dd;
+    --accent: #2563eb;
+    --accent-soft: #eef3fe;
+    --on-accent: #ffffff;
+    --good: #16a34a;
+    --good-soft: #e6f6ec;
+    --good-border: #a7d9b6;
+    --track: #e6e8ec;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(0,0,0,.05);
+  }
+  /* ---------- Theme tokens (dark) ---------- */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1014;
+      --surface: #181b21;
+      --surface-2: #1e222a;
+      --text: #e8eaed;
+      --muted: #929aa4;
+      --faint: #6b7480;
+      --border: #2a2f38;
+      --border-strong: #3a414c;
+      --accent: #5b9bff;
+      --accent-soft: #17243d;
+      --on-accent: #0c1320;
+      --good: #48d178;
+      --good-soft: #16301f;
+      --good-border: #2f6b43;
+      --track: #2a2f38;
+      --shadow: 0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 28px 20px 72px; }
+
+  header h1 { font-size: 1.3rem; margin: 0 0 2px; letter-spacing: -.01em; }
+  header .sub { color: var(--muted); margin: 0 0 20px; font-size: .84rem; }
+
+  /* ---------- Banner ---------- */
+  .banner {
+    background: #fff7e6; border: 1px solid #e8c477; color: #8a5a00;
+    border-radius: var(--radius); padding: 10px 14px;
+    margin-bottom: 18px; font-size: .85rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    .banner { background: #2e2611; border-color: #6b5827; color: #e8c477; }
+  }
+  .banner code { font-size: .9em; }
+
+  /* ---------- Stats strip ---------- */
+  .stats {
+    display: flex; flex-wrap: wrap; gap: 10px 26px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 12px 16px; margin-bottom: 12px;
+  }
+  .stat { display: flex; align-items: baseline; gap: 7px; }
+  .stat-label {
+    font-size: .72rem; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--muted); font-weight: 600;
+  }
+  .stat-value { font-size: 1.15rem; font-weight: 700; }
+
+  /* ---------- Progress ---------- */
+  .progress { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .progress-track {
+    flex: 1; height: 8px; background: var(--track);
+    border-radius: 999px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; width: 0; background: var(--accent);
+    transition: width .2s ease;
+  }
+  .progress-label { font-size: .78rem; color: var(--muted); white-space: nowrap; }
+
+  /* ---------- Tabs ---------- */
+  .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .tab {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 4px; cursor: pointer; color: var(--text);
+    font: inherit; font-size: .82rem; font-weight: 600; text-align: center;
+    transition: background .12s, border-color .12s;
+  }
+  .tab:hover { background: var(--surface-2); }
+  .tab small {
+    display: block; font-size: .7rem; font-weight: 500;
+    color: var(--muted); margin-top: 1px;
+  }
+  .tab.active { border-color: var(--accent); background: var(--accent-soft); }
+  .tab.complete { border-color: var(--good-border); }
+  .tab.complete small { color: var(--good); font-weight: 700; }
+  .tab.complete.active { background: var(--good-soft); }
+
+  /* ---------- Panel ---------- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 20px 22px; margin-bottom: 18px;
+  }
+  .pager {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  }
+  .pager-pos { font-size: .8rem; color: var(--muted); font-weight: 600; }
+  .panel-title {
+    text-align: center; font-size: .82rem; color: var(--muted);
+    font-weight: 600; margin: 10px 0 4px;
+  }
+
+  .btn {
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    color: var(--text); border-radius: 8px; padding: 6px 13px;
+    cursor: pointer; font: inherit;
+  }
+  .btn:hover:not(:disabled) { background: var(--bg); }
+  .btn:disabled { opacity: .38; cursor: default; }
+  .btn-primary {
+    background: var(--accent); border-color: var(--accent);
+    color: var(--on-accent); font-weight: 600;
+  }
+  .btn-primary:hover:not(:disabled) { filter: brightness(1.07); }
+  .btn-text {
+    background: none; border: none; color: var(--accent);
+    cursor: pointer; font: inherit; font-weight: 600; padding: 6px 2px;
+  }
+
+  /* ---------- Segment rows ---------- */
+  .seg { border-top: 1px solid var(--border); padding: 14px 0; }
+  .seg-label {
+    font-size: .7rem; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+  }
+  .seg-main {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .seg-text { font-size: 1.08rem; }
+  .seg-input { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .seg-input label { font-size: .78rem; color: var(--muted); }
+  .seg-max { font-size: .82rem; color: var(--muted); }
+  input[type="number"] {
+    width: 56px; padding: 7px 8px;
+    border: 1px solid var(--border-strong); border-radius: 7px;
+    background: var(--surface-2); color: var(--text);
+    font: inherit; font-weight: 600; text-align: center;
+  }
+
+  .score {
+    display: flex; align-items: baseline; gap: 10px;
+    border-top: 2px solid var(--border-strong);
+    margin-top: 4px; padding-top: 16px;
+  }
+  .score-label { font-size: .82rem; color: var(--muted); font-weight: 600; }
+  .score-value { font-size: 1.5rem; font-weight: 700; }
+  .score-detail { font-size: .78rem; color: var(--muted); margin-left: auto; }
+
+  .notes { margin-top: 18px; }
+  .notes label {
+    display: block; font-size: .78rem; color: var(--muted);
+    font-weight: 600; margin-bottom: 5px;
+  }
+  textarea {
+    width: 100%; min-height: 58px; resize: vertical;
+    border: 1px solid var(--border-strong); border-radius: 8px;
+    background: var(--surface-2); color: var(--text);
+    font: inherit; padding: 8px 10px;
+  }
+
+  /* ---------- Summary table ---------- */
+  .table-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  #tableWrap { margin-top: 12px; }
+  .table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  table {
+    width: 100%; border-collapse: collapse;
+    background: var(--surface); font-size: .84rem;
+  }
+  th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  thead th {
+    background: var(--surface-2); font-size: .7rem;
+    text-transform: uppercase; letter-spacing: .03em; color: var(--muted);
+  }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: var(--accent-soft); }
+  tbody tr:last-child td { border-bottom: none; }
+  tr.unscored td { color: var(--muted); }
+  tr.current { background: var(--accent-soft); }
+  tr.current td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  .ralign { text-align: right; font-variant-numeric: tabular-nums; }
+  th.ralign { text-align: right; }
+
+  /* ---------- Score breakdown ---------- */
+  .toggle-group { display: flex; gap: 20px; flex-wrap: wrap; }
+  #breakdownWrap { margin-top: 12px; }
+  .bd-pct { font-weight: 700; }
+  .bd-raw { font-size: .73rem; color: var(--muted); margin-top: 1px; }
+  td.bd-empty { color: var(--faint); }
+  tr.bd-total td { font-weight: 700; border-top: 2px solid var(--border-strong); }
+  tr.bd-total .bd-raw { font-weight: 500; }
+
+  /* ---------- Completion message ---------- */
+  .done-msg {
+    border-radius: var(--radius); padding: 12px 16px;
+    margin-bottom: 18px; font-size: .9rem;
+  }
+  .done-ok {
+    background: var(--good-soft); border: 1px solid var(--good-border);
+    color: var(--good);
+  }
+  .done-warn {
+    background: #fff7e6; border: 1px solid #e8c477; color: #8a5a00;
+  }
+  @media (prefers-color-scheme: dark) {
+    .done-warn { background: #2e2611; border-color: #6b5827; color: #e8c477; }
+  }
+
+  footer { margin-top: 26px; font-size: .76rem; color: var(--faint); }
+
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Sentence Repetition Scoring</h1>
+    <p class="sub">Small, Kemper &amp; Lyons (2000) &mdash; 30 sentences, 6 types</p>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <div class="stats" id="stats" aria-label="Summary scores"></div>
+
+  <div class="progress">
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <span class="progress-label" id="progressLabel"></span>
+  </div>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Sentence types"></nav>
+
+  <section class="panel" id="panel" role="tabpanel" aria-label="Current sentence"></section>
+
+  <div id="doneMsg" class="done-msg" hidden role="status"></div>
+
+  <section class="table-section">
+    <div class="table-bar">
+      <div class="toggle-group">
+        <button id="toggleBreakdown" class="btn-text" aria-expanded="false">&#9656; Show score breakdown</button>
+        <button id="toggleTable" class="btn-text" aria-expanded="false">&#9656; Show summary table</button>
+      </div>
+      <button id="exportBtn" class="btn btn-primary">Export CSV</button>
+    </div>
+    <div id="breakdownWrap" hidden></div>
+    <div id="tableWrap" hidden>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th class="ralign">#</th>
+              <th>Type</th>
+              <th>Sentence</th>
+              <th class="ralign">Initial</th>
+              <th class="ralign">Medial</th>
+              <th class="ralign">Final</th>
+              <th class="ralign">Score</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Each segment starts at full points (one per word) &mdash; lower the points to mark errors. A sentence counts as scored once you change its points or move on to another. Tab moves through fields &middot; Alt + &larr;/&rarr; pages through the stimuli &middot; scores are kept for this session only &mdash; export to CSV to save.</p>
+  </footer>
+</main>
+
+<noscript>
+  <p style="padding:18px">This scoring tool requires JavaScript to be enabled.</p>
+</noscript>
+
+<script>
+"use strict";
+
+/* ============================================================
+   SENTENCE DATA
+   ------------------------------------------------------------
+   30 sentences from Stimuli_Refined.md, in file order. Type
+   assignment cross-referenced from the Stimuli grouping file.
+   Each entry: { n, type, target, segments:[{label,text} x3] }.
+   Word counts are derived automatically (whitespace split;
+   hyphenated compounds count as one word). Each word is worth
+   one point, so a segment's maximum points = its word count.
+   ============================================================ */
+const SENTENCES = [
+  { n: 1, type: 'S-O', target: 'The child who the doctor examined cried after the injection.',
+    segments: [ { label: 'Initial', text: 'The child' },
+                { label: 'Medial',  text: 'who the doctor examined' },
+                { label: 'Final',   text: 'cried after the injection.' } ] },
+  { n: 2, type: 'O-S', target: 'The traffic jam upset the driver who was late for an appointment.',
+    segments: [ { label: 'Initial', text: 'The traffic jam' },
+                { label: 'Medial',  text: 'upset the driver' },
+                { label: 'Final',   text: 'who was late for an appointment.' } ] },
+  { n: 3, type: 'O-S', target: 'The police investigated the scandal that shocked the small community.',
+    segments: [ { label: 'Initial', text: 'The police' },
+                { label: 'Medial',  text: 'investigated the scandal' },
+                { label: 'Final',   text: 'that shocked the small community.' } ] },
+  { n: 4, type: 'O-O', target: 'The church opened up a shelter that the homeless could use.',
+    segments: [ { label: 'Initial', text: 'The church' },
+                { label: 'Medial',  text: 'opened up a shelter' },
+                { label: 'Final',   text: 'that the homeless could use.' } ] },
+  { n: 5, type: 'O-O', target: 'The firefighters battled the blaze that the careless campers started.',
+    segments: [ { label: 'Initial', text: 'The firefighters' },
+                { label: 'Medial',  text: 'battled the blaze' },
+                { label: 'Final',   text: 'that the careless campers started.' } ] },
+  { n: 6, type: 'Active', target: 'The tractor on the farm was ready for harvest.',
+    segments: [ { label: 'Initial', text: 'The tractor' },
+                { label: 'Medial',  text: 'on the farm' },
+                { label: 'Final',   text: 'was ready for harvest.' } ] },
+  { n: 7, type: 'Passive', target: 'The surfer was rescued by the lifeguard.',
+    segments: [ { label: 'Initial', text: 'The surfer' },
+                { label: 'Medial',  text: 'was rescued' },
+                { label: 'Final',   text: 'by the lifeguard.' } ] },
+  { n: 8, type: 'S-S', target: 'The travel agent who helped the tourist printed out the airline ticket.',
+    segments: [ { label: 'Initial', text: 'The travel agent' },
+                { label: 'Medial',  text: 'who helped the tourist' },
+                { label: 'Final',   text: 'printed out the airline ticket.' } ] },
+  { n: 9, type: 'S-O', target: 'The apartment that the professor lived in was infested with rats.',
+    segments: [ { label: 'Initial', text: 'The apartment' },
+                { label: 'Medial',  text: 'that the professor lived in' },
+                { label: 'Final',   text: 'was infested with rats.' } ] },
+  { n: 10, type: 'O-O', target: 'The soloist bowed to the conductor who the audience applauded.',
+    segments: [ { label: 'Initial', text: 'The soloist' },
+                { label: 'Medial',  text: 'bowed to the conductor' },
+                { label: 'Final',   text: 'who the audience applauded.' } ] },
+  { n: 11, type: 'Active', target: 'The couple with a camper planned a trip to Florida.',
+    segments: [ { label: 'Initial', text: 'The couple' },
+                { label: 'Medial',  text: 'with a camper' },
+                { label: 'Final',   text: 'planned a trip to Florida.' } ] },
+  { n: 12, type: 'S-O', target: 'The shopper who the clerk assisted asked for the manager.',
+    segments: [ { label: 'Initial', text: 'The shopper' },
+                { label: 'Medial',  text: 'who the clerk assisted' },
+                { label: 'Final',   text: 'asked for the manager.' } ] },
+  { n: 13, type: 'S-O', target: 'The library that the woman visited had a collection of rare coins.',
+    segments: [ { label: 'Initial', text: 'The library' },
+                { label: 'Medial',  text: 'that the woman visited' },
+                { label: 'Final',   text: 'had a collection of rare coins.' } ] },
+  { n: 14, type: 'Passive', target: 'The leak was repaired by the plumber.',
+    segments: [ { label: 'Initial', text: 'The leak' },
+                { label: 'Medial',  text: 'was repaired' },
+                { label: 'Final',   text: 'by the plumber.' } ] },
+  { n: 15, type: 'S-O', target: 'The job that the woman wanted required a college education.',
+    segments: [ { label: 'Initial', text: 'The job' },
+                { label: 'Medial',  text: 'that the woman wanted' },
+                { label: 'Final',   text: 'required a college education.' } ] },
+  { n: 16, type: 'O-O', target: 'The angry parent disciplined the student who the teacher sent home.',
+    segments: [ { label: 'Initial', text: 'The angry parent' },
+                { label: 'Medial',  text: 'disciplined the student' },
+                { label: 'Final',   text: 'who the teacher sent home.' } ] },
+  { n: 17, type: 'Active', target: 'The passenger from the suburbs waited for the train.',
+    segments: [ { label: 'Initial', text: 'The passenger' },
+                { label: 'Medial',  text: 'from the suburbs' },
+                { label: 'Final',   text: 'waited for the train.' } ] },
+  { n: 18, type: 'Active', target: 'The circus at the convention center attracted thousands of children.',
+    segments: [ { label: 'Initial', text: 'The circus' },
+                { label: 'Medial',  text: 'at the convention center' },
+                { label: 'Final',   text: 'attracted thousands of children.' } ] },
+  { n: 19, type: 'Passive', target: 'The secretary was commended by the boss.',
+    segments: [ { label: 'Initial', text: 'The secretary' },
+                { label: 'Medial',  text: 'was commended' },
+                { label: 'Final',   text: 'by the boss.' } ] },
+  { n: 20, type: 'S-S', target: 'The tornado that swept through the town destroyed several homes.',
+    segments: [ { label: 'Initial', text: 'The tornado' },
+                { label: 'Medial',  text: 'that swept through the town' },
+                { label: 'Final',   text: 'destroyed several homes.' } ] },
+  { n: 21, type: 'O-S', target: 'The operator assisted the merchant who made a long-distance call.',
+    segments: [ { label: 'Initial', text: 'The operator' },
+                { label: 'Medial',  text: 'assisted the merchant' },
+                { label: 'Final',   text: 'who made a long-distance call.' } ] },
+  { n: 22, type: 'Passive', target: 'The motorist was stopped by the Highway Patrol.',
+    segments: [ { label: 'Initial', text: 'The motorist' },
+                { label: 'Medial',  text: 'was stopped' },
+                { label: 'Final',   text: 'by the Highway Patrol.' } ] },
+  { n: 23, type: 'Passive', target: 'The biker was approached by the park ranger.',
+    segments: [ { label: 'Initial', text: 'The biker' },
+                { label: 'Medial',  text: 'was approached' },
+                { label: 'Final',   text: 'by the park ranger.' } ] },
+  { n: 24, type: 'S-S', target: 'The politician who gave a speech avoided the mob house.',
+    segments: [ { label: 'Initial', text: 'The politician' },
+                { label: 'Medial',  text: 'who gave a speech' },
+                { label: 'Final',   text: 'avoided the mob house.' } ] },
+  { n: 25, type: 'S-S', target: 'The lieutenant who disciplined the soldier walked back to headquarters.',
+    segments: [ { label: 'Initial', text: 'The lieutenant' },
+                { label: 'Medial',  text: 'who disciplined the soldier' },
+                { label: 'Final',   text: 'walked back to headquarters.' } ] },
+  { n: 26, type: 'Active', target: 'The duty-free shop at the airport sold imported watches.',
+    segments: [ { label: 'Initial', text: 'The duty-free shop' },
+                { label: 'Medial',  text: 'at the airport' },
+                { label: 'Final',   text: 'sold imported watches.' } ] },
+  { n: 27, type: 'S-S', target: 'The basketball team that boarded the bus was full of excitement.',
+    segments: [ { label: 'Initial', text: 'The basketball team' },
+                { label: 'Medial',  text: 'that boarded the bus' },
+                { label: 'Final',   text: 'was full of excitement.' } ] },
+  { n: 28, type: 'O-S', target: 'The bully threatened the girl who turned over his game.',
+    segments: [ { label: 'Initial', text: 'The bully' },
+                { label: 'Medial',  text: 'threatened the girl' },
+                { label: 'Final',   text: 'who turned over his game.' } ] },
+  { n: 29, type: 'O-S', target: 'Lightning struck the golfer who did not run for shelter.',
+    segments: [ { label: 'Initial', text: 'Lightning struck' },
+                { label: 'Medial',  text: 'the golfer' },
+                { label: 'Final',   text: 'who did not run for shelter.' } ] },
+  { n: 30, type: 'O-O', target: 'The tired waitress cleaned up the mess that the diners made.',
+    segments: [ { label: 'Initial', text: 'The tired waitress' },
+                { label: 'Medial',  text: 'cleaned up the mess' },
+                { label: 'Final',   text: 'that the diners made.' } ] }
+];
+
+const TYPES = [
+  { key: 'Active',  full: 'Active' },
+  { key: 'Passive', full: 'Passive' },
+  { key: 'O-S',     full: 'Object–Subject relative' },
+  { key: 'O-O',     full: 'Object–Object relative' },
+  { key: 'S-S',     full: 'Subject–Subject relative' },
+  { key: 'S-O',     full: 'Subject–Object relative' }
+];
+
+/* Placeholder generator: used only if SENTENCES is emptied. */
+function buildPlaceholders() {
+  const out = [];
+  let n = 1;
+  TYPES.forEach(function (t) {
+    for (let i = 1; i <= 5; i++) {
+      const segs = [
+        { label: 'Initial', text: 'Placeholder ' + t.key + ' ' + i },
+        { label: 'Medial',  text: 'awaiting the definitive' },
+        { label: 'Final',   text: 'sentence list.' }
+      ];
+      out.push({
+        n: n++, type: t.key,
+        target: segs.map(function (s) { return s.text; }).join(' '),
+        segments: segs
+      });
+    }
+  });
+  return out;
+}
+
+const USING_PLACEHOLDER = !(Array.isArray(SENTENCES) && SENTENCES.length > 0);
+const DATA = USING_PLACEHOLDER ? buildPlaceholders() : SENTENCES.slice();
+
+/* ---------- Generic helpers ---------- */
+function countWords(text) {
+  const t = String(text == null ? '' : text).trim();
+  return t ? t.split(/\s+/).length : 0;
+}
+function clampInt(v, lo, hi) {
+  let x = Math.round(Number(v));
+  if (!isFinite(x)) x = 0;
+  return Math.max(lo, Math.min(hi, x));
+}
+function maxPoints(s) {
+  return s.segments.map(function (seg) { return countWords(seg.text); });
+}
+
+/* ---------- Session state (in-memory only) ----------
+   points[i] = points awarded to segment i (starts at the
+   segment's word count = maximum). scored = sentence has been
+   reviewed (points changed, or the rater moved on from it). */
+const state = {
+  index: 0,            // position in DATA (0..29); launches at stimulus 1
+  scores: {},
+  tableOpen: false,
+  breakdownOpen: false
+};
+DATA.forEach(function (s) {
+  state.scores[s.n] = { points: maxPoints(s), notes: '', scored: false };
+});
+
+function sentencesOfType(key) {
+  return DATA.filter(function (s) { return s.type === key; });
+}
+function currentSentence() { return DATA[state.index]; }
+function fmtPct(p) {
+  if (p == null) return '—';
+  const r = Math.round(p * 10) / 10;
+  return (Number.isInteger(r) ? r : r.toFixed(1)) + '%';
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+/* ---------- Per-sentence scoring ---------- */
+function sentenceStats(s) {
+  const sc = state.scores[s.n];
+  let words = 0, points = 0;
+  const perSeg = s.segments.map(function (seg, i) {
+    const w = countWords(seg.text);
+    const p = clampInt(sc.points[i], 0, w);
+    words += w; points += p;
+    return { words: w, points: p, errors: w - p };
+  });
+  return {
+    perSeg: perSeg, words: words, points: points, errors: words - points,
+    percent: words ? (points / words) * 100 : 0,
+    scored: sc.scored
+  };
+}
+
+/* ============================================================
+   SCORING AGGREGATION
+   ------------------------------------------------------------
+   breakdown() pools points awarded vs. maximum points
+   (= word counts) across all scored sentences, optionally
+   filtered to one sentence type (typeKey) and/or one serial
+   position (posIdx; null = all three). It backs the summary
+   stats, the per-type breakdown table, and the CSV. Confirm
+   point-weighted pooling against the scoring reference once it
+   is added to the project folder.
+   ============================================================ */
+function breakdown(typeKey, posIdx) {
+  const positions = posIdx == null ? [0, 1, 2] : [posIdx];
+  let points = 0, max = 0;
+  DATA.forEach(function (s) {
+    if (typeKey != null && s.type !== typeKey) return;
+    const sc = state.scores[s.n];
+    if (!sc.scored) return;
+    positions.forEach(function (i) {
+      const w = countWords(s.segments[i].text);
+      max += w;
+      points += clampInt(sc.points[i], 0, w);
+    });
+  });
+  return { points: points, max: max, pct: max ? (points / max) * 100 : null };
+}
+function positionPercent(posIdx) { return breakdown(null, posIdx).pct; }
+function overallPercent() { return breakdown(null, null).pct; }
+function scoredCount() {
+  return DATA.filter(function (s) { return state.scores[s.n].scored; }).length;
+}
+function typeScored(key) {
+  return sentencesOfType(key).filter(function (s) {
+    return state.scores[s.n].scored;
+  }).length;
+}
+/* Mark a sentence as reviewed/scored (sticky for the session). */
+function markScored(n) {
+  if (n != null && state.scores[n]) state.scores[n].scored = true;
+}
+
+/* ---------- DOM references ---------- */
+const bannerEl  = document.getElementById('banner');
+const statsEl   = document.getElementById('stats');
+const progFill  = document.getElementById('progressFill');
+const progLabel = document.getElementById('progressLabel');
+const tabsEl    = document.getElementById('tabs');
+const panelEl   = document.getElementById('panel');
+const tableBody = document.getElementById('tableBody');
+const tableWrap = document.getElementById('tableWrap');
+const toggleBtn = document.getElementById('toggleTable');
+const breakdownWrap = document.getElementById('breakdownWrap');
+const toggleBreakdown = document.getElementById('toggleBreakdown');
+const exportBtn = document.getElementById('exportBtn');
+const doneMsg   = document.getElementById('doneMsg');
+
+/* ---------- Rendering ---------- */
+function renderBanner() {
+  if (!USING_PLACEHOLDER) { bannerEl.hidden = true; return; }
+  bannerEl.hidden = false;
+  bannerEl.innerHTML =
+    '⚠️ <strong>Placeholder data.</strong> The <code>SENTENCES</code> ' +
+    'array in index.html is empty, so generated stand-in sentences are shown.';
+}
+
+function renderStats() {
+  const items = [
+    ['Overall', overallPercent()],
+    ['Initial', positionPercent(0)],
+    ['Medial',  positionPercent(1)],
+    ['Final',   positionPercent(2)]
+  ];
+  statsEl.innerHTML = items.map(function (it) {
+    return '<div class="stat"><span class="stat-label">' + it[0] +
+      '</span><span class="stat-value">' + fmtPct(it[1]) + '</span></div>';
+  }).join('');
+}
+
+function renderProgress() {
+  const n = scoredCount();
+  progFill.style.width = (DATA.length ? (n / DATA.length) * 100 : 0) + '%';
+  progLabel.textContent = n + ' / ' + DATA.length + ' scored';
+}
+
+function renderTabs() {
+  tabsEl.innerHTML = TYPES.map(function (t) {
+    const list = sentencesOfType(t.key);
+    const done = typeScored(t.key);
+    const complete = list.length > 0 && done === list.length;
+    const active = t.key === DATA[state.index].type;
+    return '<button class="tab' + (active ? ' active' : '') +
+      (complete ? ' complete' : '') + '" role="tab" data-type="' + t.key +
+      '" aria-selected="' + active + '" title="' + escapeHtml(t.full) + '">' +
+      t.key + '<small>' + done + ' / ' + list.length + '</small></button>';
+  }).join('');
+}
+
+function renderPanel() {
+  const idx = state.index;
+  const s = DATA[idx];
+  if (!s) { panelEl.innerHTML = '<p>No stimulus.</p>'; return; }
+
+  const sc = state.scores[s.n];
+  const st = sentenceStats(s);
+  const typeFull = (TYPES.filter(function (t) { return t.key === s.type; })[0] || {}).full || s.type;
+
+  let html = '';
+  const lastIdx = idx === DATA.length - 1;
+  html += '<div class="pager">' +
+    '<button class="btn" data-action="prev"' + (idx === 0 ? ' disabled' : '') +
+      ' aria-label="Previous stimulus">‹ Prev</button>' +
+    '<span class="pager-pos">Stimulus ' + s.n + ' of ' + DATA.length + '</span>' +
+    (lastIdx
+      ? '<button class="btn btn-primary" data-action="done" aria-label="Finish scoring">All done ✓</button>'
+      : '<button class="btn" data-action="next" aria-label="Next stimulus">Next ›</button>') +
+    '</div>';
+
+  html += '<div class="panel-title">' + escapeHtml(typeFull) + '</div>';
+
+  s.segments.forEach(function (seg, i) {
+    const w = st.perSeg[i].words;
+    html += '<div class="seg">' +
+      '<div class="seg-label">' + escapeHtml(seg.label) + ' · ' +
+        w + (w === 1 ? ' word' : ' words') + '</div>' +
+      '<div class="seg-main">' +
+        '<span class="seg-text">' + escapeHtml(seg.text) + '</span>' +
+        '<span class="seg-input">' +
+          '<label for="pts' + i + '">Points</label>' +
+          '<input type="number" id="pts' + i + '" data-seg="' + i + '" min="0" max="' +
+            w + '" step="1" value="' + st.perSeg[i].points + '" ' +
+            'aria-label="Points for ' + escapeHtml(seg.label) + ' segment, maximum ' + w + '">' +
+          '<span class="seg-max">/ ' + w + '</span>' +
+        '</span></div></div>';
+  });
+
+  html += '<div class="score">' +
+    '<span class="score-label">Sentence score</span>' +
+    '<span class="score-value" id="sentencePct">' +
+      (sc.scored ? fmtPct(st.percent) : '—') + '</span>' +
+    '<span class="score-detail" id="sentenceDetail">' +
+      (sc.scored ? (st.points + ' of ' + st.words + ' points') : 'not yet scored') +
+    '</span></div>';
+
+  html += '<div class="notes"><label for="notes">Notes</label>' +
+    '<textarea id="notes" placeholder="Observations for this sentence…">' +
+    escapeHtml(sc.notes) + '</textarea></div>';
+
+  panelEl.innerHTML = html;
+}
+
+/* Update only the in-panel score figures (keeps input focus). */
+function refreshPanelDerived(s) {
+  const st = sentenceStats(s);
+  const sc = state.scores[s.n];
+  const pctEl = document.getElementById('sentencePct');
+  const detEl = document.getElementById('sentenceDetail');
+  if (pctEl) pctEl.textContent = sc.scored ? fmtPct(st.percent) : '—';
+  if (detEl) detEl.textContent = sc.scored
+    ? (st.points + ' of ' + st.words + ' points')
+    : 'not yet scored';
+}
+
+function renderTable() {
+  const cur = currentSentence();
+  tableBody.innerHTML = DATA.map(function (s) {
+    const sc = state.scores[s.n];
+    const st = sentenceStats(s);
+    const isCur = cur && cur.n === s.n;
+    const cell = function (i) {
+      const p = st.perSeg[i];
+      return sc.scored ? (p.points + ' / ' + p.words) : ('– / ' + p.words);
+    };
+    const target = s.target.length > 46 ? s.target.slice(0, 45) + '…' : s.target;
+    return '<tr data-n="' + s.n + '" class="' +
+        (sc.scored ? '' : 'unscored ') + (isCur ? 'current' : '') + '">' +
+      '<td class="ralign">' + s.n + '</td>' +
+      '<td>' + escapeHtml(s.type) + '</td>' +
+      '<td>' + escapeHtml(target) + '</td>' +
+      '<td class="ralign">' + cell(0) + '</td>' +
+      '<td class="ralign">' + cell(1) + '</td>' +
+      '<td class="ralign">' + cell(2) + '</td>' +
+      '<td class="ralign">' + (sc.scored ? fmtPct(st.percent) : '—') + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function renderBreakdown() {
+  function cell(typeKey, posIdx) {
+    const b = breakdown(typeKey, posIdx);
+    if (b.pct == null) return '<td class="ralign bd-empty">—</td>';
+    return '<td class="ralign"><div class="bd-pct">' + fmtPct(b.pct) +
+      '</div><div class="bd-raw">' + b.points + ' / ' + b.max + ' pts</div></td>';
+  }
+  function row(label, typeKey, cls) {
+    return '<tr' + cls + '><td>' + escapeHtml(label) + '</td>' +
+      cell(typeKey, 0) + cell(typeKey, 1) + cell(typeKey, 2) +
+      cell(typeKey, null) + '</tr>';
+  }
+  let html = '<div class="table-scroll"><table><thead><tr>' +
+    '<th>Sentence type</th><th class="ralign">Initial</th>' +
+    '<th class="ralign">Medial</th><th class="ralign">Final</th>' +
+    '<th class="ralign">Total</th></tr></thead><tbody>';
+  TYPES.forEach(function (t) { html += row(t.key, t.key, ''); });
+  html += row('All types', null, ' class="bd-total"');
+  html += '</tbody></table></div>';
+  breakdownWrap.innerHTML = html;
+}
+
+function renderBreakdownToggle() {
+  breakdownWrap.hidden = !state.breakdownOpen;
+  toggleBreakdown.innerHTML = (state.breakdownOpen ? '▾ Hide' : '▸ Show') + ' score breakdown';
+  toggleBreakdown.setAttribute('aria-expanded', String(state.breakdownOpen));
+}
+
+function renderTableToggle() {
+  tableWrap.hidden = !state.tableOpen;
+  toggleBtn.innerHTML = (state.tableOpen ? '▾ Hide' : '▸ Show') + ' summary table';
+  toggleBtn.setAttribute('aria-expanded', String(state.tableOpen));
+}
+
+function renderAll() {
+  renderStats();
+  renderProgress();
+  renderTabs();
+  renderPanel();
+  renderBreakdown();
+  renderTable();
+}
+
+/* Light refresh after a points change (does not rebuild panel). */
+function refreshAfterScore(s) {
+  refreshPanelDerived(s);
+  renderStats();
+  renderProgress();
+  renderTabs();
+  renderBreakdown();
+  renderTable();
+}
+
+/* ---------- Navigation ----------
+   Prev/Next steps through every stimulus in order (1..30). Leaving a
+   stimulus marks it scored ("scored when you move on"). */
+function gotoPage(delta) {
+  const next = clampInt(state.index + delta, 0, DATA.length - 1);
+  if (next === state.index) return;
+  markScored(currentSentence().n);
+  state.index = next;
+  doneMsg.hidden = true;
+  renderAll();
+}
+function gotoSentence(n) {
+  const idx = DATA.findIndex(function (x) { return x.n === n; });
+  if (idx < 0) return;
+  markScored(currentSentence().n);
+  state.index = idx;
+  doneMsg.hidden = true;
+  renderAll();
+}
+
+/* "All done": finalise the last stimulus and reveal the results. */
+function finishScoring() {
+  markScored(currentSentence().n);
+  state.breakdownOpen = true;
+  renderAll();
+  renderBreakdownToggle();
+  const n = scoredCount(), all = DATA.length;
+  if (n === all) {
+    doneMsg.className = 'done-msg done-ok';
+    doneMsg.innerHTML = '✓ <strong>Scoring complete.</strong> All ' + all +
+      ' stimuli scored — review the breakdown below, or export the CSV.';
+  } else {
+    doneMsg.className = 'done-msg done-warn';
+    doneMsg.innerHTML = '<strong>' + n + ' of ' + all + ' stimuli scored.</strong> ' +
+      (all - n) + ' still unscored — page back to any you skipped. ' +
+      'The breakdown below covers scored stimuli only.';
+  }
+  doneMsg.hidden = false;
+  doneMsg.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ---------- Event wiring ---------- */
+tabsEl.addEventListener('click', function (e) {
+  const btn = e.target.closest('.tab');
+  if (!btn) return;
+  const first = sentencesOfType(btn.dataset.type)[0];   // jump to first of that type
+  if (first) gotoSentence(first.n);
+});
+
+panelEl.addEventListener('click', function (e) {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  const action = btn.dataset.action;
+  if (action === 'done') finishScoring();
+  else gotoPage(action === 'next' ? 1 : -1);
+});
+
+panelEl.addEventListener('input', function (e) {
+  const t = e.target;
+  if (t.id === 'notes') {
+    state.scores[currentSentence().n].notes = t.value;
+    return;
+  }
+  if (t.dataset && t.dataset.seg != null) {
+    const s = currentSentence();
+    const segIdx = Number(t.dataset.seg);
+    const w = countWords(s.segments[segIdx].text);
+    const sc = state.scores[s.n];
+    sc.points[segIdx] = t.value === '' ? 0 : clampInt(t.value, 0, w);
+    markScored(s.n);            // changing points scores the sentence
+    doneMsg.hidden = true;
+    refreshAfterScore(s);
+  }
+});
+
+/* Clamp the visible value when a points field loses focus. */
+panelEl.addEventListener('change', function (e) {
+  const t = e.target;
+  if (!t.dataset || t.dataset.seg == null) return;
+  const s = currentSentence();
+  const segIdx = Number(t.dataset.seg);
+  const w = countWords(s.segments[segIdx].text);
+  t.value = t.value === '' ? 0 : clampInt(t.value, 0, w);
+});
+
+tableBody.addEventListener('click', function (e) {
+  const tr = e.target.closest('tr[data-n]');
+  if (tr) gotoSentence(Number(tr.dataset.n));
+});
+
+toggleBreakdown.addEventListener('click', function () {
+  state.breakdownOpen = !state.breakdownOpen;
+  renderBreakdownToggle();
+});
+
+toggleBtn.addEventListener('click', function () {
+  state.tableOpen = !state.tableOpen;
+  renderTableToggle();
+});
+
+document.addEventListener('keydown', function (e) {
+  if (e.altKey && !e.ctrlKey && !e.metaKey &&
+      (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    e.preventDefault();
+    gotoPage(e.key === 'ArrowRight' ? 1 : -1);
+  }
+});
+
+exportBtn.addEventListener('click', exportCSV);
+
+/* ---------- CSV export ---------- */
+function csvCell(v) {
+  return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+}
+function exportCSV() {
+  markScored(currentSentence().n);   // the sentence in view counts as reviewed
+  renderAll();
+
+  const rows = [[
+    'Number', 'Type', 'Target',
+    'Initial_Segment', 'Initial_Max_Points', 'Initial_Points', 'Initial_Errors',
+    'Medial_Segment', 'Medial_Max_Points', 'Medial_Points', 'Medial_Errors',
+    'Final_Segment', 'Final_Max_Points', 'Final_Points', 'Final_Errors',
+    'Total_Max_Points', 'Total_Points', 'Total_Errors', 'Percent_Correct',
+    'Scored', 'Notes'
+  ]];
+  DATA.forEach(function (s) {
+    const sc = state.scores[s.n];
+    const st = sentenceStats(s);
+    const row = [s.n, s.type, s.target];
+    st.perSeg.forEach(function (p, i) {
+      row.push(s.segments[i].text, p.words, p.points, p.errors);
+    });
+    row.push(st.words, st.points, st.errors,
+      sc.scored ? st.percent.toFixed(1) : '',
+      sc.scored ? 'yes' : 'no',
+      sc.notes);
+    rows.push(row);
+  });
+
+  rows.push([]);
+  rows.push(['Sentences scored', scoredCount() + ' / ' + DATA.length]);
+  rows.push([]);
+  rows.push(['Score breakdown by sentence type — points awarded, maximum, percent']);
+  rows.push(['Type',
+    'Initial_Points', 'Initial_Max', 'Initial_Pct',
+    'Medial_Points', 'Medial_Max', 'Medial_Pct',
+    'Final_Points', 'Final_Max', 'Final_Pct',
+    'Total_Points', 'Total_Max', 'Total_Pct']);
+  const bdRow = function (label, typeKey) {
+    const r = [label];
+    [0, 1, 2, null].forEach(function (pos) {
+      const b = breakdown(typeKey, pos);
+      r.push(b.points, b.max, b.pct == null ? '' : b.pct.toFixed(1));
+    });
+    return r;
+  };
+  TYPES.forEach(function (t) { rows.push(bdRow(t.key, t.key)); });
+  rows.push(bdRow('All types', null));
+
+  const csv = rows.map(function (r) {
+    return r.map(csvCell).join(',');
+  }).join('\r\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const date = new Date().toISOString().slice(0, 10);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'sentence_repetition_scores_' + date + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+}
+
+/* ---------- Init ---------- */
+renderBanner();
+renderAll();
+renderBreakdownToggle();
+renderTableToggle();
+</script>
+</body>
+</html>
