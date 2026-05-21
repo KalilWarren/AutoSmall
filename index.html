@@ -241,6 +241,39 @@
     .done-warn { background: #2e2611; border-color: #6b5827; color: #e8c477; }
   }
 
+  /* ---------- Submit to REDCap / modal ---------- */
+  .action-group { display: flex; gap: 8px; }
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-overlay[hidden] { display: none; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: 0 10px 44px rgba(0,0,0,.35);
+    padding: 22px; width: 100%; max-width: 420px;
+  }
+  .modal h2 { margin: 0 0 3px; font-size: 1.05rem; }
+  .modal-sub { margin: 0 0 16px; font-size: .8rem; color: var(--muted); }
+  .modal-field { margin-bottom: 12px; }
+  .modal-field label {
+    display: block; font-size: .76rem; font-weight: 600;
+    color: var(--muted); margin-bottom: 4px;
+  }
+  .modal-field input {
+    width: 100%; padding: 8px 10px; font: inherit;
+    border: 1px solid var(--border-strong); border-radius: 7px;
+    background: var(--surface-2); color: var(--text);
+  }
+  .modal-status { font-size: .83rem; margin-top: 12px; min-height: 1.1em; }
+  .modal-status.err { color: #c0392b; }
+  .modal-status.ok  { color: var(--good); }
+  @media (prefers-color-scheme: dark) { .modal-status.err { color: #f08a7e; } }
+  .modal-actions {
+    display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;
+  }
+
   footer { margin-top: 26px; font-size: .76rem; color: var(--faint); }
 
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -274,7 +307,10 @@
         <button id="toggleBreakdown" class="btn-text" aria-expanded="false">&#9656; Show score breakdown</button>
         <button id="toggleTable" class="btn-text" aria-expanded="false">&#9656; Show summary table</button>
       </div>
-      <button id="exportBtn" class="btn btn-primary">Export CSV</button>
+      <div class="action-group">
+        <button id="submitBtn" class="btn btn-primary" hidden>Submit to REDCap</button>
+        <button id="exportBtn" class="btn">Export CSV</button>
+      </div>
     </div>
     <div id="breakdownWrap" hidden></div>
     <div id="tableWrap" hidden>
@@ -302,12 +338,47 @@
   </footer>
 </main>
 
+<div id="redcapModal" class="modal-overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="redcapModalTitle">
+    <h2 id="redcapModalTitle">Submit to REDCap</h2>
+    <p class="modal-sub" id="redcapModalSub"></p>
+    <div class="modal-field">
+      <label for="rcParticipant">Participant ID</label>
+      <input type="text" id="rcParticipant" autocomplete="off" placeholder="e.g. ABC-001">
+    </div>
+    <div class="modal-field">
+      <label for="rcDate">Assessment date</label>
+      <input type="date" id="rcDate">
+    </div>
+    <div class="modal-field">
+      <label for="rcPassword">Submit password</label>
+      <input type="password" id="rcPassword" autocomplete="off">
+    </div>
+    <div class="modal-status" id="rcStatus"></div>
+    <div class="modal-actions">
+      <button class="btn" id="rcCancel">Cancel</button>
+      <button class="btn btn-primary" id="rcSubmit">Submit</button>
+    </div>
+  </div>
+</div>
+
 <noscript>
   <p style="padding:18px">This scoring tool requires JavaScript to be enabled.</p>
 </noscript>
 
 <script>
 "use strict";
+
+/* ============================================================
+   REDCAP SUBMISSION — CONFIG
+   ------------------------------------------------------------
+   After deploying the Cloudflare Worker (see worker/README.md),
+   paste its URL below, e.g.
+     https://autosmall-redcap.<your-subdomain>.workers.dev
+   While WORKER_URL is '', the "Submit to REDCap" button stays
+   hidden, so the page is safe to publish before the Worker is up.
+   ============================================================ */
+const WORKER_URL = 'https://autosmall-redcap.authenautosmall.workers.dev';
 
 /* ============================================================
    SENTENCE DATA
@@ -364,21 +435,21 @@ const SENTENCES = [
     segments: [ { label: 'Initial', text: 'The couple' },
                 { label: 'Medial',  text: 'with a camper' },
                 { label: 'Final',   text: 'planned a trip to Florida.' } ] },
-  { n: 12, type: 'S-O', target: 'The shopper who the clerk assisted asked for the manager.',
+  { n: 12, type: 'S-O', target: 'The shopper who the clerk assisted asked for a manager.',
     segments: [ { label: 'Initial', text: 'The shopper' },
                 { label: 'Medial',  text: 'who the clerk assisted' },
-                { label: 'Final',   text: 'asked for the manager.' } ] },
-  { n: 13, type: 'S-O', target: 'The library that the woman visited had a collection of rare coins.',
+                { label: 'Final',   text: 'asked for a manager.' } ] },
+  { n: 13, type: 'S-O', target: 'The library that the women visited had a collection of rare coins.',
     segments: [ { label: 'Initial', text: 'The library' },
-                { label: 'Medial',  text: 'that the woman visited' },
+                { label: 'Medial',  text: 'that the women visited' },
                 { label: 'Final',   text: 'had a collection of rare coins.' } ] },
   { n: 14, type: 'Passive', target: 'The leak was repaired by the plumber.',
     segments: [ { label: 'Initial', text: 'The leak' },
                 { label: 'Medial',  text: 'was repaired' },
                 { label: 'Final',   text: 'by the plumber.' } ] },
-  { n: 15, type: 'S-O', target: 'The job that the woman wanted required a college education.',
+  { n: 15, type: 'S-O', target: 'The job that the women wanted required a college education.',
     segments: [ { label: 'Initial', text: 'The job' },
-                { label: 'Medial',  text: 'that the woman wanted' },
+                { label: 'Medial',  text: 'that the women wanted' },
                 { label: 'Final',   text: 'required a college education.' } ] },
   { n: 16, type: 'O-O', target: 'The angry parent disciplined the student who the teacher sent home.',
     segments: [ { label: 'Initial', text: 'The angry parent' },
@@ -400,22 +471,22 @@ const SENTENCES = [
     segments: [ { label: 'Initial', text: 'The tornado' },
                 { label: 'Medial',  text: 'that swept through the town' },
                 { label: 'Final',   text: 'destroyed several homes.' } ] },
-  { n: 21, type: 'O-S', target: 'The operator assisted the merchant who made a long-distance call.',
+  { n: 21, type: 'O-S', target: 'The operator assisted the merchant who made a long distance call.',
     segments: [ { label: 'Initial', text: 'The operator' },
                 { label: 'Medial',  text: 'assisted the merchant' },
-                { label: 'Final',   text: 'who made a long-distance call.' } ] },
+                { label: 'Final',   text: 'who made a long distance call.' } ] },
   { n: 22, type: 'Passive', target: 'The motorist was stopped by the Highway Patrol.',
     segments: [ { label: 'Initial', text: 'The motorist' },
                 { label: 'Medial',  text: 'was stopped' },
                 { label: 'Final',   text: 'by the Highway Patrol.' } ] },
-  { n: 23, type: 'Passive', target: 'The biker was approached by the park ranger.',
-    segments: [ { label: 'Initial', text: 'The biker' },
+  { n: 23, type: 'Passive', target: 'The hiker was approached by the park ranger.',
+    segments: [ { label: 'Initial', text: 'The hiker' },
                 { label: 'Medial',  text: 'was approached' },
                 { label: 'Final',   text: 'by the park ranger.' } ] },
-  { n: 24, type: 'S-S', target: 'The politician who gave a speech avoided the mob house.',
+  { n: 24, type: 'S-S', target: 'The politician who gave the speech avoided the main issues.',
     segments: [ { label: 'Initial', text: 'The politician' },
-                { label: 'Medial',  text: 'who gave a speech' },
-                { label: 'Final',   text: 'avoided the mob house.' } ] },
+                { label: 'Medial',  text: 'who gave the speech' },
+                { label: 'Final',   text: 'avoided the main issues.' } ] },
   { n: 25, type: 'S-S', target: 'The lieutenant who disciplined the soldier walked back to headquarters.',
     segments: [ { label: 'Initial', text: 'The lieutenant' },
                 { label: 'Medial',  text: 'who disciplined the soldier' },
@@ -428,10 +499,10 @@ const SENTENCES = [
     segments: [ { label: 'Initial', text: 'The basketball team' },
                 { label: 'Medial',  text: 'that boarded the bus' },
                 { label: 'Final',   text: 'was full of excitement.' } ] },
-  { n: 28, type: 'O-S', target: 'The bully threatened the girl who turned over his game.',
+  { n: 28, type: 'O-S', target: 'The bully frightened the girl who jumped over the fence.',
     segments: [ { label: 'Initial', text: 'The bully' },
-                { label: 'Medial',  text: 'threatened the girl' },
-                { label: 'Final',   text: 'who turned over his game.' } ] },
+                { label: 'Medial',  text: 'frightened the girl' },
+                { label: 'Final',   text: 'who jumped over the fence.' } ] },
   { n: 29, type: 'O-S', target: 'Lightning struck the golfer who did not run for shelter.',
     segments: [ { label: 'Initial', text: 'Lightning struck' },
                 { label: 'Medial',  text: 'the golfer' },
@@ -590,6 +661,15 @@ const breakdownWrap = document.getElementById('breakdownWrap');
 const toggleBreakdown = document.getElementById('toggleBreakdown');
 const exportBtn = document.getElementById('exportBtn');
 const doneMsg   = document.getElementById('doneMsg');
+const submitBtn      = document.getElementById('submitBtn');
+const redcapModal    = document.getElementById('redcapModal');
+const redcapModalSub = document.getElementById('redcapModalSub');
+const rcParticipant  = document.getElementById('rcParticipant');
+const rcDate         = document.getElementById('rcDate');
+const rcPassword     = document.getElementById('rcPassword');
+const rcStatus       = document.getElementById('rcStatus');
+const rcCancel       = document.getElementById('rcCancel');
+const rcSubmit       = document.getElementById('rcSubmit');
 
 /* ---------- Rendering ---------- */
 function renderBanner() {
@@ -950,11 +1030,118 @@ function exportCSV() {
   setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
 }
 
+/* ---------- REDCap submission ---------- */
+function setRcStatus(msg, kind) {
+  rcStatus.textContent = msg;
+  rcStatus.className = 'modal-status' + (kind ? ' ' + kind : '');
+}
+
+/* Assemble AutoSmall's scoring into the payload the Worker expects.
+   The Worker maps this onto the REDCap field names. */
+function buildRedcapPayload(participantId, assessmentDate, password) {
+  const sentences = DATA.map(function (s) {
+    const sc = state.scores[s.n];
+    return { n: s.n, scored: sc.scored, points: sc.points.slice() };
+  });
+  const typeTotals = {};
+  TYPES.forEach(function (t) {
+    typeTotals[t.key] = {
+      initial: breakdown(t.key, 0).pct,
+      medial:  breakdown(t.key, 1).pct,
+      final:   breakdown(t.key, 2).pct,
+      total:   breakdown(t.key, null).pct
+    };
+  });
+  const comments = DATA
+    .filter(function (s) { return state.scores[s.n].notes.trim(); })
+    .map(function (s) { return '#' + s.n + ': ' + state.scores[s.n].notes.trim(); })
+    .join('\n');
+  return {
+    password: password,
+    participantId: participantId,
+    assessmentDate: assessmentDate,
+    sentences: sentences,
+    rawTotals: {
+      initial: breakdown(null, 0).points, medial: breakdown(null, 1).points,
+      final:   breakdown(null, 2).points, total:  breakdown(null, null).points
+    },
+    percentTotals: {
+      initial: breakdown(null, 0).pct, medial: breakdown(null, 1).pct,
+      final:   breakdown(null, 2).pct, total:  breakdown(null, null).pct
+    },
+    typeTotals: typeTotals,
+    comments: comments
+  };
+}
+
+function openRedcapModal() {
+  rcParticipant.value = '';
+  rcPassword.value = '';
+  rcDate.value = new Date().toISOString().slice(0, 10);
+  rcSubmit.disabled = false;
+  rcCancel.disabled = false;
+  rcCancel.textContent = 'Cancel';
+  const n = scoredCount();
+  redcapModalSub.textContent = n + ' of ' + DATA.length + ' stimuli scored' +
+    (n < DATA.length ? ' — unscored stimuli are sent blank.' : '.');
+  setRcStatus('', '');
+  redcapModal.hidden = false;
+  rcParticipant.focus();
+}
+function closeRedcapModal() { redcapModal.hidden = true; }
+
+async function submitToRedcap() {
+  const pid = rcParticipant.value.trim();
+  const date = rcDate.value;
+  const pw = rcPassword.value;
+  if (!pid)  { setRcStatus('Enter a Participant ID.', 'err'); rcParticipant.focus(); return; }
+  if (!date) { setRcStatus('Choose an assessment date.', 'err'); return; }
+  if (!pw)   { setRcStatus('Enter the submit password.', 'err'); rcPassword.focus(); return; }
+
+  rcSubmit.disabled = true;
+  rcCancel.disabled = true;
+  setRcStatus('Submitting to REDCap…', '');
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildRedcapPayload(pid, date, pw))
+    });
+    let data = {};
+    try { data = await res.json(); } catch (e) { /* non-JSON response */ }
+    if (res.ok && data.ok) {
+      setRcStatus('✓ Submitted to REDCap for participant ' + pid + '.', 'ok');
+      rcPassword.value = '';
+      rcCancel.disabled = false;
+      rcCancel.textContent = 'Close';
+    } else {
+      setRcStatus('✗ ' + (data.error || ('Submission failed (HTTP ' + res.status + ').')), 'err');
+      rcSubmit.disabled = false;
+      rcCancel.disabled = false;
+    }
+  } catch (e) {
+    setRcStatus('✗ Could not reach the submission service — check your connection.', 'err');
+    rcSubmit.disabled = false;
+    rcCancel.disabled = false;
+  }
+}
+
+submitBtn.addEventListener('click', openRedcapModal);
+rcCancel.addEventListener('click', closeRedcapModal);
+rcSubmit.addEventListener('click', submitToRedcap);
+redcapModal.addEventListener('click', function (e) {
+  if (e.target === redcapModal) closeRedcapModal();
+});
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && !redcapModal.hidden) closeRedcapModal();
+});
+
 /* ---------- Init ---------- */
 renderBanner();
 renderAll();
 renderBreakdownToggle();
 renderTableToggle();
+if (WORKER_URL) submitBtn.hidden = false;
 </script>
 </body>
 </html>

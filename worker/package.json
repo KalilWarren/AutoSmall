@@ -1,0 +1,7 @@
+{
+  "name": "autosmall-redcap",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker proxying AutoSmall scoring submissions to REDCap"
+}

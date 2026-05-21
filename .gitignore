@@ -8,3 +8,10 @@ Stimuli_Refined.md
 
 # Tooling / local config
 .claude/
+
+# REDCap data dictionary — metadata, kept local only
+*.csv
+
+# Node / Cloudflare Worker build artifacts
+node_modules/
+.wrangler/

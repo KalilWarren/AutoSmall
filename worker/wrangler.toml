@@ -1,0 +1,21 @@
+# Cloudflare Worker config — AutoSmall → REDCap proxy.
+#
+# Deploy:  cd worker && npx wrangler deploy
+# Secrets (set once, never stored in this file or the repo):
+#   npx wrangler secret put REDCAP_TOKEN      <- your REDCap API token
+#   npx wrangler secret put SUBMIT_PASSWORD   <- the shared submit password
+
+name = "autosmall-redcap"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[vars]
+# REDCap API endpoint (not secret).
+REDCAP_API_URL = "https://redcap.research.sc.edu/api/"
+
+# Browser origin allowed to call this Worker (the GitHub Pages site).
+ALLOWED_ORIGIN = "https://kalilwarren.github.io"
+
+# Only if the REDCap project is LONGITUDINAL: set the event name, e.g.
+# REDCAP_EVENT = "baseline_arm_1"
+# Leave it out entirely for a standard (non-longitudinal) project.

@@ -99,3 +99,17 @@ against the scoring reference.
 - **Export CSV** — downloads each segment's points awarded, maximum points,
   errors, and % correct per sentence, plus notes and the full per-type score
   breakdown.
+- **Submit to REDCap** — appears only once the submission Worker is configured
+  (see below). Opens a dialog for the Participant ID, assessment date, and
+  shared password, then pushes the scores straight into the REDCap project.
+
+## Submitting results to REDCap
+
+AutoSmall can push results directly into the project's
+`smalls_sentence_repetition` form. Because a static site cannot safely hold a
+REDCap API token, submission goes through a tiny **Cloudflare Worker** that
+holds the token and the shared password as server-side secrets.
+
+Setup is a one-time job — see [`worker/README.md`](worker/README.md) for the
+deploy steps. Until the Worker URL is filled into `index.html`, the
+*Submit to REDCap* button stays hidden, so the site is safe to publish without it.
